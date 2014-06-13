@@ -44,6 +44,10 @@
 #include "invokelib.h"
 #include "search.h"
 
+#ifdef HAVE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
+
 // Delay before exit.
 static const unsigned int EXIT_DELAY     = 0;
 static const unsigned int MIN_EXIT_DELAY = 1;
@@ -410,6 +414,9 @@ static void usage(int status)
            "                         if already launched.\n"
            "  -o, --keep-oom-score   Notify invoker that the launched process should inherit oom_score_adj\n"
            "                         from the booster. The score is reset to 0 normally.\n"
+#ifdef HAVE_SYSTEMD
+           "  -S, --systemd          Notify systemd about the boosted PID and exit.\n"
+#endif
            "  -T, --test-mode        Invoker test mode. Also control file in root home should be in place.\n"
            "  -h, --help             Print this help.\n\n"
            "Example: %s --type=qt5 /usr/bin/helloworld\n\n",
@@ -446,13 +453,12 @@ static int wait_for_launched_process_to_exit(int socket_fd, bool wait_term)
 {
     int status = 0;
 
+    g_invoked_pid = invoker_recv_pid(socket_fd);
+    debug("Booster's pid is %d \n ", g_invoked_pid);
+
     // Wait for launched process to exit
     if (wait_term)
     {
-        // coverity[tainted_string_return_content]
-        g_invoked_pid = invoker_recv_pid(socket_fd);
-        debug("Booster's pid is %d \n ", g_invoked_pid);
-
         // Forward UNIX signals to the invoked process
         sigs_init();
 
@@ -657,6 +663,10 @@ int main(int argc, char *argv[])
     struct stat   file_stat;
     bool test_mode = false;
 
+#ifdef HAVE_SYSTEMD
+    bool systemd_notify = false;
+#endif
+
     // wait-term parameter by default
     magic_options |= INVOKER_MSG_MAGIC_OPTION_WAIT;
 
@@ -682,8 +692,7 @@ int main(int argc, char *argv[])
         {"type",             required_argument, NULL, 't'},
         {"delay",            required_argument, NULL, 'd'},
         {"respawn",          required_argument, NULL, 'r'},
-        {"splash",           required_argument, NULL, 'S'},
-        {"splash-landscape", required_argument, NULL, 'L'},
+        {"systemd",          no_argument,       NULL, 'S'},
         {0, 0, 0, 0}
     };
 
@@ -691,7 +700,7 @@ int main(int argc, char *argv[])
     // The use of + for POSIXLY_CORRECT behavior is a GNU extension, but avoids polluting
     // the environment
     int opt;
-    while ((opt = getopt_long(argc, argv, "+hcwnGDsoTd:t:r:S:L:", longopts, NULL)) != -1)
+    while ((opt = getopt_long(argc, argv, "+hcwnGDsoTd:t:r:S", longopts, NULL)) != -1)
     {
         switch(opt)
         {
@@ -742,8 +751,14 @@ int main(int argc, char *argv[])
             break;
 
         case 'S':
-        case 'L':
-            // Removed splash support. Ignore.
+#ifdef HAVE_SYSTEMD
+            systemd_notify = true;
+            wait_term = false;
+            magic_options &= (~INVOKER_MSG_MAGIC_OPTION_WAIT);
+#else
+            report(report_error, "systemd support is not available");
+            exit(EXIT_FAILURE);
+#endif
             break;
 
         case '?':
@@ -812,6 +827,15 @@ int main(int argc, char *argv[])
     // Send commands to the launcher daemon
     info("Invoking execution: '%s'\n", prog_name);
     int ret_val = invoke(prog_argc, prog_argv, prog_name, app_type, magic_options, wait_term, respawn_delay, test_mode);
+
+#ifdef HAVE_SYSTEMD
+    // Notify systemd if requested
+    if (systemd_notify && g_invoked_pid > 0)
+    {
+        sd_notifyf(0, "MAINPID=%d", g_invoked_pid);
+        // XXX ready
+    }
+#endif
 
     // Sleep for delay before exiting
     if (delay)

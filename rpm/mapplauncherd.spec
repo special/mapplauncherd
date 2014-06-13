@@ -21,7 +21,7 @@ Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 Requires(pre):  shadow-utils
 BuildRequires:  pkgconfig(libshadowutils)
-BuildRequires:  pkgconfig(systemd)
+BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  cmake
 BuildRequires:  python
