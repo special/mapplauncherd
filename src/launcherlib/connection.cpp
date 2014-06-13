@@ -39,7 +39,7 @@ Connection::Connection(int socketFd, bool testMode) :
         m_argv(NULL),
         m_priority(0),
         m_delay(0),
-        m_sendPid(false),
+        m_wait(false),
         m_gid(0),
         m_uid(0)
 {
@@ -218,7 +218,7 @@ uint32_t Connection::receiveMagic()
             return -1;
         }
     }
-    m_sendPid  = magic & INVOKER_MSG_MAGIC_OPTION_WAIT;
+    m_wait = magic & INVOKER_MSG_MAGIC_OPTION_WAIT;
 
     return magic & INVOKER_MSG_MAGIC_OPTION_MASK;
 }
@@ -476,9 +476,7 @@ bool Connection::receiveActions()
 
         case INVOKER_MSG_END:
             sendMsg(INVOKER_MSG_ACK);
-
-            if (m_sendPid)
-                sendPid(getpid());
+            sendPid(getpid());
 
             return true;
 
@@ -529,7 +527,7 @@ bool Connection::receiveApplicationData(AppData* appData)
 
 bool Connection::isReportAppExitStatusNeeded() const
 {
-    return m_sendPid;
+    return m_wait;
 }
 
 pid_t Connection::peerPid()

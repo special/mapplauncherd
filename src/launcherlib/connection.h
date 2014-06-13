@@ -156,7 +156,7 @@ private:
     int      m_io[IO_DESCRIPTOR_COUNT];
     uint32_t m_priority;
     uint32_t m_delay;
-    bool     m_sendPid;
+    bool     m_wait;
     gid_t    m_gid;
     uid_t    m_uid;
 
